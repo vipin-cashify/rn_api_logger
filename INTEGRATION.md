@@ -23,6 +23,7 @@ Before any edits, verify the target project meets these requirements. If anythin
 | Has `react-native-safe-area-context` | Read `package.json` → check dep | Add it: `"react-native-safe-area-context": "^4.0.0"` |
 | iOS AppDelegate is Swift | Look for `ios/<AppName>/AppDelegate.swift` | Stop. This skill only handles Swift AppDelegate. Ask the user. |
 | Android `MainApplication.kt` exists | Look for `android/app/src/main/.../MainApplication.kt` | Stop. Plugin requires Kotlin MainApplication, not Java. Ask. |
+| `@reglobe/lego-core` is a dependency | Read `package.json` → `dependencies."@reglobe/lego-core"` | If present, **Step 1.5 is mandatory** — add the autolinking exclusion before running any install. |
 
 Ask the user these questions BEFORE editing (use AskUserQuestion if available):
 
@@ -45,6 +46,92 @@ Edit the target project's root `package.json`. Add inside `"dependencies"`:
 Also verify `"react-native-safe-area-context": "^4.0.0"` (or later) is present. If missing, add it.
 
 **Do NOT add `"codegenConfig"` anywhere referencing this plugin.** It is a legacy paper module — codegen will break the build (`react_codegen_RNLegoApiLogger` CMake target missing).
+
+---
+
+## Step 1.5 — Exclude `@reglobe/lego-core` from autolinking (MANDATORY if present)
+
+Most Cashify projects depend on `@reglobe/lego-core` (used for `LegoServiceURL`, hooks, etc.). The package is **JS-only** but ships an `android/` folder (unrelated example app), so RN CLI autolinking on both platforms (`settings.gradle`'s `autolinkLibrariesFromCommand()`, Podfile's `use_native_modules!`) tries to treat it as a native module and fails.
+
+Check first:
+
+```bash
+grep -l '"@reglobe/lego-core"' package.json
+```
+
+If the result is non-empty, set up the fix below **before** Step 6's install commands.
+
+### Why a root `react-native.config.js` exclusion does NOT work
+
+Adding `dependencies: { '@reglobe/lego-core': { platforms: { android: null, ios: null } } }` to the project root `react-native.config.js` is the documented RN CLI pattern, but **does not reliably override** `@reglobe/lego-core`'s package-level autolinking metadata. RN CLI still attempts to link it. Do not waste time on this approach.
+
+### Working fix — per-package config written via postinstall
+
+The `@reglobe/lego-core` package itself needs to ship a `react-native.config.js` declaring it has no platforms. Since we can't patch the upstream package, write it into `node_modules/` after every install via a postinstall script.
+
+#### 1. Create / update the postinstall script
+
+Look for an existing `scripts/postinstall.js` in the target project. If one exists, **append** the lego-core fix block to it (don't overwrite). If not, create it at `scripts/postinstall.js`:
+
+```js
+const fs = require('fs');
+const path = require('path');
+
+const target = path.resolve(
+  __dirname,
+  '../node_modules/@reglobe/lego-core/react-native.config.js',
+);
+
+const content = `module.exports = {
+  dependency: {
+    platforms: {
+      android: null,
+      ios: null,
+    },
+  },
+};
+`;
+
+try {
+  if (fs.existsSync(path.dirname(target))) {
+    fs.writeFileSync(target, content, 'utf8');
+  }
+} catch (_) {}
+```
+
+> Note the `dependency:` (singular) key — this is the RN CLI **per-package config** form, where a package declares its own platform-linking status. This is different from the `dependencies:` (plural) form used in a project root `react-native.config.js` to override a specific dep, and only the singular per-package form reliably suppresses autolinking for `@reglobe/lego-core`.
+
+#### 2. Wire it into `package.json`
+
+Add (or extend) the `postinstall` script in the target project's `package.json`:
+
+```jsonc
+"scripts": {
+  // ... existing scripts ...
+  "postinstall": "node scripts/postinstall.js"
+}
+```
+
+If a `postinstall` already exists (e.g. `"patch-package"`), chain it:
+
+```jsonc
+"postinstall": "node scripts/postinstall.js && patch-package"
+```
+
+#### 3. Run the install to apply
+
+```bash
+yarn install
+# verify the file landed:
+cat node_modules/@reglobe/lego-core/react-native.config.js
+# should print the dependency: { platforms: { android: null, ios: null } } block
+```
+
+If you skipped Step 6's cache clear before realizing this, run it again now:
+
+```bash
+rm -rf android/app/build/generated/autolinking android/app/.cxx
+```
 
 ---
 
@@ -303,6 +390,7 @@ Tell the user:
 | Failure | Cause | Fix |
 |---|---|---|
 | `CMake Error … react_codegen_RNLegoApiLogger … not built` | `codegenConfig` declared in the plugin's or host's package.json | Remove `codegenConfig` referencing this plugin. Then `rm -rf android/app/build/generated/autolinking android/app/.cxx`. |
+| Autolinking fails on `@reglobe/lego-core` (Android: `autolinkLibrariesFromCommand()` error in `settings.gradle`; iOS: `use_native_modules!` failure in Podfile) | RN CLI treats `lego-core`'s `android/` folder as a native module, but it's JS-only. Root `react-native.config.js` `dependencies` overrides do **not** work for this package | Add the postinstall script that writes a per-package `react-native.config.js` inside `node_modules/@reglobe/lego-core/` (see Step 1.5). Re-run `yarn install` + cache clear. |
 | Duplicate module `LegoAPILoggerModule` at runtime | Project still has its own legacy `LegoAPILoggerModule` source files | Delete the legacy files. On iOS also remove the pbxproj references (use `sed -i '' '/LegoAPILogger/d' ios/<App>.xcodeproj/project.pbxproj` after backing up). |
 | `Cannot find name 'LegoApiLogger'` in JS even after install | `yarn install` cached an old plugin snapshot (file: deps in yarn v1 are copies, not symlinks) | Run `yarn install --force` and restart TS server in the IDE. |
 | `Cannot find module 'LegoApiLogger'` in Swift | Pods not refreshed, or Swift module name mismatch | `cd ios && pod install`. Verify import is `import LegoApiLogger` (not `react_native_lego_api_logger`). |
