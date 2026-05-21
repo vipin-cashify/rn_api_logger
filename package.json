@@ -1,0 +1,40 @@
+{
+  "name": "react-native-lego-api-logger",
+  "version": "1.0.0",
+  "description": "In-app API logger for React Native: captures every OkHttp / URLSession request and exposes a debug screen.",
+  "main": "src/index.tsx",
+  "types": "src/index.tsx",
+  "files": [
+    "src",
+    "android",
+    "ios",
+    "react-native-lego-api-logger.podspec",
+    "README.md"
+  ],
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "api",
+    "logger",
+    "okhttp",
+    "urlsession",
+    "debug"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cashify/react-native-lego-api-logger.git"
+  },
+  "license": "MIT",
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-native": ">=0.70.0",
+    "react-native-safe-area-context": ">=4.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "19.2.0",
+    "react-native": "0.83.1",
+    "typescript": "^5.0.0"
+  }
+}

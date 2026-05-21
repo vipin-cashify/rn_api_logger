@@ -1,0 +1,20 @@
+node_modules/
+lib/
+.DS_Store
+
+# Android
+android/build/
+android/.gradle/
+android/local.properties
+android/.idea/
+*.iml
+
+# iOS
+ios/build/
+ios/Pods/
+ios/*.xcworkspace
+ios/DerivedData/
+
+# Editor
+.vscode/
+.idea/
