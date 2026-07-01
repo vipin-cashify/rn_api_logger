@@ -241,9 +241,7 @@ export const ApiLoggerScreen: React.FC<ApiLoggerScreenProps> = ({
               onPress={() => setSelected(item)}
             >
               <Text style={styles.rowMethod}>{item.method}</Text>
-              <Text style={styles.rowUrl} numberOfLines={1}>
-                {item.url}
-              </Text>
+              <Text style={styles.rowUrl}>{item.url}</Text>
               <Text
                 style={[
                   styles.rowStatusBadge,
@@ -286,7 +284,9 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'center',
+    // Top-align so the method + status columns stay put when the URL wraps
+    // across multiple lines (the row grows to fit the full URL).
+    alignItems: 'flex-start',
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
@@ -305,6 +305,7 @@ const styles = StyleSheet.create({
   rowUrl: {
     flex: 1,
     fontSize: 12,
+    lineHeight: 17,
     color: '#475569',
   },
   rowStatusBadge: {
