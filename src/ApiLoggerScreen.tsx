@@ -109,7 +109,9 @@ export const ApiLoggerScreen: React.FC<ApiLoggerScreenProps> = ({
     setError(null);
     try {
       const raw = await LegoApiLogger.getLogs();
-      setLogs(raw.map(parseLog));
+      // Native getLogs() returns oldest-first; reverse so the newest sits at the
+      // top, matching the live-subscribe prepend behaviour below.
+      setLogs(raw.map(parseLog).reverse());
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to load logs';
       setError(msg);
