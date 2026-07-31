@@ -43,6 +43,44 @@ function headersToText(headers?: Record<string, string>): string {
     .join('\n');
 }
 
+/** Escape a value for a single-quoted POSIX shell string: ' → '\'' */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Ready-to-run curl command replaying the logged request. Uses the RAW request
+ * body (not the prettified one) so the replay is byte-identical. Skips the
+ * `content-length` header (curl recomputes it) and adds `--compressed` when
+ * the request advertised gzip.
+ */
+function buildCurlCommand(log: ApiLog): string {
+  if (!log.url) return '';
+
+  const parts: string[] = [`curl -X ${log.method || 'GET'}`];
+
+  const headers = log.requestHeaders ?? {};
+  let wantsCompressed = false;
+  for (const [key, value] of Object.entries(headers)) {
+    const lower = key.toLowerCase();
+    if (lower === 'content-length') continue;
+    if (lower === 'accept-encoding' && value.toLowerCase().includes('gzip')) {
+      wantsCompressed = true;
+    }
+    parts.push(`-H ${shellQuote(`${key}: ${value}`)}`);
+  }
+
+  if (log.dataSent && log.dataSent !== '') {
+    parts.push(`-d ${shellQuote(log.dataSent)}`);
+  }
+  if (wantsCompressed) {
+    parts.push('--compressed');
+  }
+  parts.push(shellQuote(log.url));
+
+  return parts.join(' \\\n  ');
+}
+
 function buildShareText(log: ApiLog): string {
   const duration =
     log.startTime && log.endTime ? `${log.endTime - log.startTime}ms` : null;
@@ -74,6 +112,12 @@ function buildShareText(log: ApiLog): string {
   if (resBody) {
     lines.push('\n── RESPONSE BODY ────────────────');
     lines.push(resBody);
+  }
+
+  const curl = buildCurlCommand(log);
+  if (curl) {
+    lines.push('\n── CURL ─────────────────────────');
+    lines.push(curl);
   }
 
   return lines.join('\n');
@@ -208,6 +252,7 @@ export const ApiLoggerScreen: React.FC<ApiLoggerScreenProps> = ({
             title="RESPONSE BODY"
             content={tryPrettyJson(selected.response)}
           />
+          <SectionBlock title="CURL" content={buildCurlCommand(selected)} />
         </ScrollView>
       </SafeAreaView>
     );
